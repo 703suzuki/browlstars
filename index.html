@@ -2,482 +2,468 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Arena Battle</title>
+<title>Battle Arena</title>
 
 <style>
+
 body{
 margin:0;
-background:#0b1220;
-display:flex;
-justify-content:center;
-align-items:center;
-height:100vh;
+background:#1e1e1e;
+overflow:hidden;
 font-family:sans-serif;
-color:white;
 }
 
 canvas{
-background:#1e293b;
-border:4px solid white;
+background:#2d6a4f;
+display:block;
+margin:auto;
 }
 
 #ui{
 position:absolute;
 top:10px;
 left:10px;
-font-size:18px;
+color:white;
+font-size:16px;
 }
 
-#menu{
-position:absolute;
-text-align:center;
-}
-
-button{
-padding:10px 20px;
-margin:10px;
-font-size:18px;
-cursor:pointer;
-}
 </style>
 </head>
 
 <body>
 
-<div id="menu">
-<h2>キャラクター選択</h2>
-<button onclick="startGame('fast')">スピード</button>
-<button onclick="startGame('tank')">タンク</button>
-<button onclick="startGame('sniper')">スナイパー</button>
-</div>
+<div id="ui"></div>
 
-<div id="ui" style="display:none">
-Score: <span id="score">0</span><br>
-Reload: <span id="reload">0</span><br>
-Ult: <span id="ult">0</span>
-</div>
-
-<canvas id="game" width="1200" height="700"></canvas>
+<canvas id="game" width="1000" height="600"></canvas>
 
 <script>
 
-const canvas=document.getElementById("game")
-const ctx=canvas.getContext("2d")
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
 
-const scoreEl=document.getElementById("score")
-const reloadEl=document.getElementById("reload")
-const ultEl=document.getElementById("ult")
+const W = canvas.width;
+const H = canvas.height;
 
-let keys={}
+const keys = {};
 
-document.addEventListener("keydown",e=>keys[e.code]=true)
-document.addEventListener("keyup",e=>keys[e.code]=false)
+document.addEventListener("keydown",e=>keys[e.key.toLowerCase()]=true);
+document.addEventListener("keyup",e=>keys[e.key.toLowerCase()]=false);
 
 class Character{
 
-constructor(x,y,team,type){
+constructor(x,y,type,team){
 
-this.x=x
-this.y=y
-this.team=team
-this.type=type
+this.x=x;
+this.y=y;
 
-this.reload=0
-this.ult=0
-this.hyper=false
+this.team=team;
+this.type=type;
 
-if(type=="fast"){
-this.size=20
-this.speed=4
-this.hp=90
-this.damage=10
-this.range=250
+this.size=40;
+
+this.hp=200;
+this.maxHp=200;
+
+this.reload=3;
+this.maxReload=3;
+
+this.ult=0;
+this.hyper=0;
+
+this.lastDamage=0;
+
+this.speed=2;
+
+if(type==="tank"){
+this.hp=400;
+this.maxHp=400;
+this.speed=1.4;
 }
 
-if(type=="tank"){
-this.size=28
-this.speed=2.4
-this.hp=180
-this.damage=14
-this.range=200
+if(type==="speed"){
+this.speed=3;
 }
-
-if(type=="sniper"){
-this.size=22
-this.speed=2.6
-this.hp=80
-this.damage=30
-this.range=450
-}
-
-this.maxHp=this.hp
-
-this.aiTimer=0
-this.dir=Math.random()*Math.PI*2
 
 }
 
 draw(){
 
-ctx.save()
+ctx.fillStyle=this.team==="player"?"blue":"red";
 
-ctx.translate(this.x,this.y)
+if(this.type==="tank") ctx.fillStyle="#3a86ff";
+if(this.type==="speed") ctx.fillStyle="#06d6a0";
+if(this.type==="shooter") ctx.fillStyle="#ffd166";
 
-if(this.type=="fast"){
-ctx.fillStyle=this.team=="blue"?"#3b82f6":"#ef4444"
-ctx.beginPath()
-ctx.arc(0,0,this.size,0,Math.PI*2)
-ctx.fill()
-}
+ctx.beginPath();
+ctx.arc(this.x,this.y,this.size/2,0,Math.PI*2);
+ctx.fill();
 
-if(this.type=="tank"){
-ctx.fillStyle=this.team=="blue"?"#10b981":"#b91c1c"
-ctx.fillRect(-this.size,-this.size,this.size*2,this.size*2)
-}
-
-if(this.type=="sniper"){
-ctx.fillStyle=this.team=="blue"?"#8b5cf6":"#dc2626"
-ctx.beginPath()
-ctx.moveTo(0,-this.size)
-ctx.lineTo(-this.size,this.size)
-ctx.lineTo(this.size,this.size)
-ctx.closePath()
-ctx.fill()
-}
-
-ctx.restore()
-
-ctx.fillStyle="white"
-ctx.fillText(Math.floor(this.hp),this.x-10,this.y-this.size-10)
-
-}
-
-move(){
-
-let nx=this.x
-let ny=this.y
-
-if(keys["KeyW"])ny-=this.speed
-if(keys["KeyS"])ny+=this.speed
-if(keys["KeyA"])nx-=this.speed
-if(keys["KeyD"])nx+=this.speed
-
-if(!hitWall(nx,ny,this.size)){
-
-this.x=Math.max(this.size,Math.min(canvas.width-this.size,nx))
-this.y=Math.max(this.size,Math.min(canvas.height-this.size,ny))
+ctx.fillStyle="white";
+ctx.fillText(Math.floor(this.hp),this.x-10,this.y-30);
 
 }
 
 }
 
-ai(){
+class Bullet{
 
-let target=player
+constructor(x,y,vx,vy,team){
 
-let dx=target.x-this.x
-let dy=target.y-this.y
+this.x=x;
+this.y=y;
 
-let dist=Math.sqrt(dx*dx+dy*dy)
+this.vx=vx;
+this.vy=vy;
 
-if(dist<this.range){
+this.team=team;
 
-let angle=Math.atan2(dy,dx)
-
-let moveAngle=angle+Math.PI
-
-let nx=this.x+Math.cos(moveAngle)*this.speed
-let ny=this.y+Math.sin(moveAngle)*this.speed
-
-if(!hitWall(nx,ny,this.size)){
-this.x=nx
-this.y=ny
-}
-
-if(this.reload<=0){
-
-shoot(this,dx,dy)
-
-this.reload=50
+this.size=6;
 
 }
 
-}else{
+update(){
 
-this.aiTimer--
-
-if(this.aiTimer<=0){
-
-this.dir=Math.random()*Math.PI*2
-this.aiTimer=80
+this.x+=this.vx;
+this.y+=this.vy;
 
 }
 
-let nx=this.x+Math.cos(this.dir)*this.speed
-let ny=this.y+Math.sin(this.dir)*this.speed
+draw(){
 
-if(!hitWall(nx,ny,this.size)){
-this.x=nx
-this.y=ny
-}
+ctx.fillStyle="yellow";
 
-}
-
-this.x=Math.max(this.size,Math.min(canvas.width-this.size,this.x))
-this.y=Math.max(this.size,Math.min(canvas.height-this.size,this.y))
+ctx.beginPath();
+ctx.arc(this.x,this.y,this.size,0,Math.PI*2);
+ctx.fill();
 
 }
 
 }
-
-function shoot(char,dx,dy){
-
-let d=Math.sqrt(dx*dx+dy*dy)
-
-bullets.push({
-
-x:char.x,
-y:char.y,
-vx:dx/d*8,
-vy:dy/d*8,
-team:char.team,
-damage:char.hyper?char.damage*2:char.damage
-
-})
-
-}
-
-function autoAim(){
-
-let nearest=null
-let dist=99999
-
-enemies.forEach(e=>{
-
-let d=Math.hypot(player.x-e.x,player.y-e.y)
-
-if(d<dist){
-dist=d
-nearest=e
-}
-
-})
-
-return nearest
-
-}
-
-function gadget(){
-
-for(let i=0;i<8;i++){
-
-let a=i*Math.PI*2/8
-
-bullets.push({
-
-x:player.x,
-y:player.y,
-vx:Math.cos(a)*6,
-vy:Math.sin(a)*6,
-team:"blue",
-damage:15
-
-})
-
-}
-
-}
-
-function hyper(){
-
-player.hyper=true
-
-setTimeout(()=>{
-player.hyper=false
-},5000)
-
-}
-
-function ult(){
-
-if(player.ult<100)return
-
-player.ult=0
-
-for(let i=0;i<40;i++){
-
-let a=i*Math.PI*2/40
-
-bullets.push({
-
-x:player.x,
-y:player.y,
-vx:Math.cos(a)*7,
-vy:Math.sin(a)*7,
-team:"blue",
-damage:35
-
-})
-
-}
-
-}
-
-function hitWall(x,y,s){
-
-for(let w of walls){
-
-if(x+s>w.x && x-s<w.x+w.w && y+s>w.y && y-s<w.y+w.h)
-return true
-
-}
-
-return false
-
-}
-
-const bullets=[]
-const enemies=[]
 
 const walls=[
-
-{x:200,y:150,w:200,h:40},
-{x:500,y:100,w:40,h:300},
-{x:700,y:200,w:250,h:40},
-{x:850,y:350,w:40,h:250},
-{x:300,y:450,w:300,h:40},
-{x:1000,y:100,w:40,h:250}
-
-]
-
-let player
-let score=0
-
-function startGame(type){
-
-document.getElementById("menu").style.display="none"
-document.getElementById("ui").style.display="block"
-
-player=new Character(200,300,"blue",type)
-
-for(let i=0;i<6;i++)
-enemies.push(new Character(900,100+i*90,"red","fast"))
-
-gameLoop()
-
-}
-
-document.addEventListener("keydown",e=>{
-
-if(!player)return
-
-if(e.code=="Space" && player.reload<=0){
-
-let target=autoAim()
-
-if(target){
-
-let dx=target.x-player.x
-let dy=target.y-player.y
-
-shoot(player,dx,dy)
-
-player.reload=30
-
-}
-
-}
-
-if(e.code=="KeyC")gadget()
-if(e.code=="KeyB")hyper()
-if(e.code=="KeyV")ult()
-
-})
-
-function updateBullets(){
-
-bullets.forEach((b,i)=>{
-
-b.x+=b.vx
-b.y+=b.vy
-
-ctx.fillStyle="yellow"
-ctx.beginPath()
-ctx.arc(b.x,b.y,4,0,Math.PI*2)
-ctx.fill()
-
-let targets=[player,...enemies]
-
-targets.forEach(t=>{
-
-if(t.team==b.team)return
-
-if(Math.abs(b.x-t.x)<t.size && Math.abs(b.y-t.y)<t.size){
-
-t.hp-=b.damage
-
-bullets.splice(i,1)
-
-player.ult+=8
-if(player.ult>100)player.ult=100
-
-if(t.hp<=0){
-
-score++
-scoreEl.textContent=score
-
-t.x=800+Math.random()*200
-t.y=Math.random()*600
-t.hp=t.maxHp
-
-}
-
-}
-
-})
-
-})
-
-}
+{x:200,y:100,w:100,h:200},
+{x:500,y:300,w:200,h:80},
+{x:750,y:150,w:80,h:200},
+{x:350,y:400,w:150,h:80}
+];
 
 function drawWalls(){
 
-ctx.fillStyle="#64748b"
+ctx.fillStyle="#555";
 
-walls.forEach(w=>{
-ctx.fillRect(w.x,w.y,w.w,w.h)
-})
+for(let w of walls){
+
+ctx.fillRect(w.x,w.y,w.w,w.h);
+
+}
 
 }
 
-function gameLoop(){
+function collideWall(x,y,size){
 
-ctx.clearRect(0,0,canvas.width,canvas.height)
+for(let w of walls){
 
-drawWalls()
-
-player.move()
-player.draw()
-
-if(player.reload>0)player.reload--
-
-reloadEl.textContent=player.reload
-ultEl.textContent=Math.floor(player.ult)
-
-enemies.forEach(e=>{
-
-if(e.reload>0)e.reload--
-
-e.ai()
-e.draw()
-
-})
-
-updateBullets()
-
-requestAnimationFrame(gameLoop)
+if(
+x+size/2>w.x &&
+x-size/2<w.x+w.w &&
+y+size/2>w.y &&
+y-size/2<w.y+w.h
+){
+return true;
+}
 
 }
+
+return false;
+
+}
+
+function randomSpawn(){
+
+while(true){
+
+let x=Math.random()*W;
+let y=Math.random()*H;
+
+if(!collideWall(x,y,40)) return {x,y};
+
+}
+
+}
+
+const spawn=randomSpawn();
+
+const player=new Character(spawn.x,spawn.y,"shooter","player");
+
+const bots=[];
+
+const types=["tank","speed","shooter"];
+
+for(let i=0;i<6;i++){
+
+let s=randomSpawn();
+
+bots.push(new Character(
+s.x,
+s.y,
+types[Math.floor(Math.random()*types.length)],
+"enemy"
+));
+
+}
+
+const bullets=[];
+
+function shoot(shooter,target){
+
+if(shooter.reload<=0) return;
+
+let dx=target.x-shooter.x;
+let dy=target.y-shooter.y;
+
+let d=Math.hypot(dx,dy);
+
+dx/=d;
+dy/=d;
+
+bullets.push(new Bullet(
+shooter.x,
+shooter.y,
+dx*6,
+dy*6,
+shooter.team
+));
+
+shooter.reload--;
+
+}
+
+function autoAimTarget(){
+
+let nearest=null;
+let dist=9999;
+
+for(let b of bots){
+
+let d=Math.hypot(b.x-player.x,b.y-player.y);
+
+if(d<dist){
+dist=d;
+nearest=b;
+}
+
+}
+
+return nearest;
+
+}
+
+function updateBots(){
+
+for(let b of bots){
+
+let target=player;
+
+let dx=target.x-b.x;
+let dy=target.y-b.y;
+
+let d=Math.hypot(dx,dy);
+
+if(d<300){
+
+dx/=d;
+dy/=d;
+
+b.x+=dx*b.speed;
+b.y+=dy*b.speed;
+
+}else{
+
+b.x+= (Math.random()-0.5)*2;
+b.y+= (Math.random()-0.5)*2;
+
+}
+
+b.x=Math.max(20,Math.min(W-20,b.x));
+b.y=Math.max(20,Math.min(H-20,b.y));
+
+if(Math.random()<0.02){
+
+shoot(b,player);
+
+}
+
+}
+
+}
+
+function updatePlayer(){
+
+let sp=player.speed;
+
+let nx=player.x;
+let ny=player.y;
+
+if(keys["w"]) ny-=sp;
+if(keys["s"]) ny+=sp;
+if(keys["a"]) nx-=sp;
+if(keys["d"]) nx+=sp;
+
+nx=Math.max(20,Math.min(W-20,nx));
+ny=Math.max(20,Math.min(H-20,ny));
+
+if(!collideWall(nx,ny,player.size)){
+player.x=nx;
+player.y=ny;
+}
+
+}
+
+function updateBullets(){
+
+for(let i=bullets.length-1;i>=0;i--){
+
+let b=bullets[i];
+
+b.update();
+
+if(b.x<0||b.x>W||b.y<0||b.y>H){
+bullets.splice(i,1);
+continue;
+}
+
+if(collideWall(b.x,b.y,5)){
+bullets.splice(i,1);
+continue;
+}
+
+let targets=b.team==="player"?bots:[player];
+
+for(let t of targets){
+
+let d=Math.hypot(b.x-t.x,b.y-t.y);
+
+if(d<20){
+
+t.hp-=20;
+t.lastDamage=Date.now();
+
+if(b.team==="player") player.ult+=5;
+
+bullets.splice(i,1);
+break;
+
+}
+
+}
+
+}
+
+}
+
+function regen(){
+
+let now=Date.now();
+
+for(let c of [player,...bots]){
+
+if(now-c.lastDamage>3000){
+
+c.hp=Math.min(c.maxHp,c.hp+0.1);
+
+}
+
+}
+
+}
+
+function reload(){
+
+for(let c of [player,...bots]){
+
+c.reload=Math.min(c.maxReload,c.reload+0.01);
+
+}
+
+}
+
+function abilities(){
+
+if(keys[" "]){
+let t=autoAimTarget();
+if(t) shoot(player,t);
+}
+
+if(keys["c"]){
+
+player.hp=Math.min(player.maxHp,player.hp+40);
+
+}
+
+if(keys["v"] && player.ult>=100){
+
+player.ult=0;
+
+for(let b of bots){
+
+b.hp-=80;
+
+}
+
+}
+
+if(keys["b"] && player.hyper>=100){
+
+player.hyper=0;
+
+player.speed=5;
+
+setTimeout(()=>player.speed=2,5000);
+
+}
+
+}
+
+function draw(){
+
+ctx.clearRect(0,0,W,H);
+
+drawWalls();
+
+player.draw();
+
+for(let b of bots) b.draw();
+
+for(let b of bullets) b.draw();
+
+document.getElementById("ui").innerHTML=
+"HP:"+Math.floor(player.hp)+"<br>"+
+"Reload:"+player.reload.toFixed(1)+"<br>"+
+"Ult:"+Math.floor(player.ult)+"%";
+
+}
+
+function loop(){
+
+updatePlayer();
+
+updateBots();
+
+updateBullets();
+
+regen();
+
+reload();
+
+abilities();
+
+draw();
+
+requestAnimationFrame(loop);
+
+}
+
+loop();
 
 </script>
 
