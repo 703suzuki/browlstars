@@ -49,6 +49,8 @@ const keys = {};
 document.addEventListener("keydown",e=>keys[e.key.toLowerCase()]=true);
 document.addEventListener("keyup",e=>keys[e.key.toLowerCase()]=false);
 
+
+
 class Character{
 
 constructor(x,y,type,team){
@@ -88,22 +90,26 @@ this.speed=3;
 
 draw(){
 
-ctx.fillStyle=this.team==="player"?"blue":"red";
+let color="yellow";
 
-if(this.type==="tank") ctx.fillStyle="#3a86ff";
-if(this.type==="speed") ctx.fillStyle="#06d6a0";
-if(this.type==="shooter") ctx.fillStyle="#ffd166";
+if(this.type==="tank") color="#3a86ff";
+if(this.type==="speed") color="#06d6a0";
+if(this.type==="shooter") color="#ffd166";
+
+ctx.fillStyle=color;
 
 ctx.beginPath();
 ctx.arc(this.x,this.y,this.size/2,0,Math.PI*2);
 ctx.fill();
 
 ctx.fillStyle="white";
-ctx.fillText(Math.floor(this.hp),this.x-10,this.y-30);
+ctx.fillText(Math.floor(this.hp),this.x-12,this.y-25);
 
 }
 
 }
+
+
 
 class Bullet{
 
@@ -130,7 +136,7 @@ this.y+=this.vy;
 
 draw(){
 
-ctx.fillStyle="yellow";
+ctx.fillStyle="orange";
 
 ctx.beginPath();
 ctx.arc(this.x,this.y,this.size,0,Math.PI*2);
@@ -140,24 +146,31 @@ ctx.fill();
 
 }
 
+
+
 const walls=[
-{x:200,y:100,w:100,h:200},
+
+{x:200,y:100,w:120,h:200},
 {x:500,y:300,w:200,h:80},
-{x:750,y:150,w:80,h:200},
-{x:350,y:400,w:150,h:80}
+{x:750,y:150,w:80,h:220},
+{x:350,y:400,w:150,h:80},
+{x:100,y:350,w:120,h:120}
+
 ];
+
+
 
 function drawWalls(){
 
 ctx.fillStyle="#555";
 
 for(let w of walls){
-
 ctx.fillRect(w.x,w.y,w.w,w.h);
-
 }
 
 }
+
+
 
 function collideWall(x,y,size){
 
@@ -178,6 +191,8 @@ return false;
 
 }
 
+
+
 function randomSpawn(){
 
 while(true){
@@ -191,9 +206,13 @@ if(!collideWall(x,y,40)) return {x,y};
 
 }
 
+
+
 const spawn=randomSpawn();
 
 const player=new Character(spawn.x,spawn.y,"shooter","player");
+
+
 
 const bots=[];
 
@@ -212,7 +231,11 @@ types[Math.floor(Math.random()*types.length)],
 
 }
 
+
+
 const bullets=[];
+
+
 
 function shoot(shooter,target){
 
@@ -238,6 +261,8 @@ shooter.reload--;
 
 }
 
+
+
 function autoAimTarget(){
 
 let nearest=null;
@@ -258,44 +283,65 @@ return nearest;
 
 }
 
+
+
+/* BOT AI */
+
 function updateBots(){
 
 for(let b of bots){
 
-let target=player;
+let dx = player.x - b.x;
+let dy = player.y - b.y;
 
-let dx=target.x-b.x;
-let dy=target.y-b.y;
+let dist = Math.hypot(dx,dy);
 
-let d=Math.hypot(dx,dy);
+let moveX = 0;
+let moveY = 0;
 
-if(d<300){
+let r = Math.random();
 
-dx/=d;
-dy/=d;
+/* 行動AI */
 
-b.x+=dx*b.speed;
-b.y+=dy*b.speed;
+if(r < 0.35){
 
-}else{
+moveX = (Math.random()-0.5);
+moveY = (Math.random()-0.5);
 
-b.x+= (Math.random()-0.5)*2;
-b.y+= (Math.random()-0.5)*2;
+}
+else if(r < 0.7){
+
+moveX = dx/dist;
+moveY = dy/dist;
+
+}
+else{
+
+moveX = -dx/dist;
+moveY = -dy/dist;
 
 }
 
-b.x=Math.max(20,Math.min(W-20,b.x));
-b.y=Math.max(20,Math.min(H-20,b.y));
+let nx = b.x + moveX * b.speed;
+let ny = b.y + moveY * b.speed;
 
-if(Math.random()<0.02){
+if(!collideWall(nx,ny,b.size)){
+b.x = nx;
+b.y = ny;
+}
 
+b.x = Math.max(20,Math.min(W-20,b.x));
+b.y = Math.max(20,Math.min(H-20,b.y));
+
+if(dist < 350 && Math.random() < 0.03){
 shoot(b,player);
-
 }
 
 }
 
 }
+
+
 
 function updatePlayer(){
 
@@ -318,6 +364,8 @@ player.y=ny;
 }
 
 }
+
+
 
 function updateBullets(){
 
@@ -361,6 +409,8 @@ break;
 
 }
 
+
+
 function regen(){
 
 let now=Date.now();
@@ -369,23 +419,27 @@ for(let c of [player,...bots]){
 
 if(now-c.lastDamage>3000){
 
-c.hp=Math.min(c.maxHp,c.hp+0.1);
+c.hp=Math.min(c.maxHp,c.hp+0.17);
 
 }
 
 }
 
 }
+
+
 
 function reload(){
 
 for(let c of [player,...bots]){
 
-c.reload=Math.min(c.maxReload,c.reload+0.01);
+c.reload=Math.min(c.maxReload,c.reload+0.02);
 
 }
 
 }
+
+
 
 function abilities(){
 
@@ -405,9 +459,7 @@ if(keys["v"] && player.ult>=100){
 player.ult=0;
 
 for(let b of bots){
-
 b.hp-=80;
-
 }
 
 }
@@ -423,6 +475,8 @@ setTimeout(()=>player.speed=2,5000);
 }
 
 }
+
+
 
 function draw(){
 
@@ -442,6 +496,8 @@ document.getElementById("ui").innerHTML=
 "Ult:"+Math.floor(player.ult)+"%";
 
 }
+
+
 
 function loop(){
 
